@@ -1,6 +1,6 @@
 # Spam Buff (Geode · GD 2.2081 · Android ARM64)
 
-Mod de Geometry Dash que optimiza el spam. Compatible con Geode 5.11.2.
+Mod de Geometry Dash que optimiza el spam y trae un auto-spam con botón en pantalla o tecla. Compatible con Geode 5.11.2.
 
 ## Cómo sacar el .geode (sin PC)
 
@@ -20,6 +20,7 @@ Instalá Geode CLI + Android NDK y corré `geode build -p android64` en esta car
 ## Cómo funciona
 
 Hook en `GJBaseGameLayer::handleButton` (entrada) y `processCommands` (un tick por paso de física).
-La lógica está en `SpamEngine.hpp` (C++ puro, probada en PC con un simulador).
+La lógica está en `SpamEngine.hpp` (C++ puro, probada en PC con un simulador, incluido el auto-spam).
+La tecla usa los keybinds de Geode (ajuste `auto-spam-key`); en el celu se usa el botón AUTO.
 
 El id del mod (`lleomc2.spam_buff`) y el developer se cambian en `mod.json`.

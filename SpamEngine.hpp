@@ -20,6 +20,8 @@ struct Config {
     int    dutyPercent = 50;    // Pulso: % del ciclo presionado
     bool   protectTaps = true;  // alarga toques ultra cortos
     double minPressMs  = 6.0;
+    double autoIntervalMs = 70.0; // auto-spam: tiempo entre clics (ms)
+    double autoPressMs    = 30.0; // auto-spam: cuanto dura cada clic (ms)
 };
 
 // Eventos que hay que entregar al juego, en orden (true = presionar, false = soltar).
@@ -40,9 +42,38 @@ public:
     bool wantsRelease() const { return m_gameDown && m_fingers == 0; }
     int  fingers() const { return m_fingers; }
     Mode activeMode() const { return m_mode; }
+    bool autoActive() const { return m_auto; }
+
+    // Auto-spam (tecla o boton): genera los clics solo, a intervalo fijo.
+    // Mientras esta activo, los toques reales solo se cuentan (no llegan al juego).
+    void setAuto(bool on, Config const& c, Emitted& out) {
+        if (on == m_auto) return;
+        if (on) {
+            flushPendingUp(out);
+            m_spam = false;
+            m_n = 0;
+            m_pulseDown = false;
+            m_pulseTimer = 0.0;
+            m_auto = true;
+            m_autoDown = true;
+            if (!m_gameDown) setGame(true, out);
+            m_autoTimer = autoPressPhase(c);
+        } else {
+            m_auto = false;
+            m_autoDown = false;
+            m_autoTimer = 0.0;
+            bool want = m_fingers > 0; // si el dedo sigue abajo, queda como hold normal
+            if (m_gameDown != want) setGame(want, out);
+        }
+    }
 
     // Evento real del jugador (lo que llegaria a handleButton).
     void onReal(bool down, double now, bool cubeLike, Config const& c, Emitted& out) {
+        if (m_auto) {
+            if (down) ++m_fingers;
+            else if (m_fingers > 0) --m_fingers;
+            return;
+        }
         if (down) {
             ++m_fingers;
             pushPress(now);
@@ -79,6 +110,19 @@ public:
     void tick(double now, double dtMs, Config const& c, Emitted& out) {
         if (dtMs > 0.0) m_lastDt = dtMs;
         if (m_pendingUp && now >= m_upDue) flushPendingUp(out);
+        if (m_auto) {
+            m_autoTimer -= dtMs;
+            if (m_autoTimer > 0.0) return;
+            m_autoDown = !m_autoDown;
+            setGame(m_autoDown, out);
+            double step = std::max(m_lastDt, 1.0);
+            double press = autoPressPhase(c);
+            double interval = std::max(c.autoIntervalMs, press + step);
+            double phase = m_autoDown ? press : std::max(interval - press, step);
+            m_autoTimer += phase;
+            if (m_autoTimer <= 0.0) m_autoTimer = phase * 0.5;
+            return;
+        }
         if (!m_spam) return;
         if (now - m_lastPress > timeoutMs(c)) {
             endSpam(out);
@@ -99,6 +143,7 @@ public:
     // Mod apagado a mitad de partida: deja el juego en el estado real del dedo.
     void shutdown(Emitted& out) {
         flushPendingUp(out);
+        if (m_auto) setAuto(false, Config{}, out);
         if (m_spam) endSpam(out);
         m_n = 0;
     }
@@ -120,6 +165,15 @@ private:
     bool   m_pulseDown = false;
     double m_pulseTimer = 0.0;
     double m_lastDt    = 1000.0 / 240.0;
+    bool   m_auto      = false;
+    bool   m_autoDown  = false;
+    double m_autoTimer = 0.0;
+
+    double autoPressPhase(Config const& c) const {
+        double step = std::max(m_lastDt, 1.0);
+        double interval = std::max(c.autoIntervalMs, step * 2.0);
+        return std::clamp(c.autoPressMs, step, std::max(step, interval - step));
+    }
 
     void setGame(bool d, Emitted& out) {
         m_gameDown = d;
