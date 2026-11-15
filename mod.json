@@ -1,0 +1,99 @@
+{
+	"geode": "5.11.2",
+	"gd": {
+		"android": "2.2081"
+	},
+	"id": "lleomc2.spam_buff",
+	"name": "Spam Buff",
+	"version": "v1.0.0",
+	"developer": "lleomc2",
+	"description": "Mejora el spam: detecta toques rápidos y los convierte en un hold o en pulsos regulares y consistentes.",
+	"settings": {
+		"enabled": {
+			"type": "bool",
+			"name": "Activar Spam Buff",
+			"description": "Enciende o apaga el mod. También hay un botón rápido en el menú de pausa.",
+			"default": true
+		},
+		"mode": {
+			"type": "string",
+			"name": "Modo",
+			"description": "Auto: en cubo usa Hold y en el resto de modos usa Pulso. Hold: mientras hacés spam el botón queda presionado. Pulso: el mod genera pulsos regulares siguiendo tu ritmo.",
+			"default": "Auto",
+			"one-of": ["Auto", "Hold", "Pulso"]
+		},
+		"trigger-cps": {
+			"type": "int",
+			"name": "CPS para activar",
+			"description": "Toques por segundo mínimos para considerar que estás haciendo spam. Más bajo = se activa antes. Se mide en tiempo de juego.",
+			"default": 7,
+			"min": 3,
+			"max": 15,
+			"control": {
+				"slider": true
+			}
+		},
+		"min-taps": {
+			"type": "int",
+			"name": "Toques para activar",
+			"description": "Cuántos toques seguidos a esa velocidad hacen falta. Los toques sueltos o lentos quedan 100% normales.",
+			"default": 4,
+			"min": 3,
+			"max": 8,
+			"control": {
+				"slider": true
+			}
+		},
+		"speed-auto": {
+			"type": "bool",
+			"name": "Velocidad automática (Pulso)",
+			"description": "En modo Pulso copia tu ritmo pero perfectamente regular. Si lo apagás se usa la velocidad fija de abajo.",
+			"default": true
+		},
+		"spam-cps": {
+			"type": "int",
+			"name": "Velocidad del spam (CPS)",
+			"description": "Solo modo Pulso con la velocidad automática apagada: clics por segundo del pulso.",
+			"default": 14,
+			"min": 5,
+			"max": 30,
+			"control": {
+				"slider": true
+			}
+		},
+		"precision": {
+			"type": "int",
+			"name": "Precisión",
+			"description": "Qué tan rápido se corta el spam cuando dejás de tocar. Alta = corta casi al instante (puede cortarse si tocás irregular). Baja = más tolerante.",
+			"default": 6,
+			"min": 1,
+			"max": 10,
+			"control": {
+				"slider": true
+			}
+		},
+		"pulse-duty": {
+			"type": "int",
+			"name": "Duración del clic (Pulso)",
+			"description": "Porcentaje de cada ciclo que el botón queda presionado en modo Pulso.",
+			"default": 50,
+			"min": 20,
+			"max": 80,
+			"control": {
+				"slider": true
+			}
+		},
+		"protect-taps": {
+			"type": "bool",
+			"name": "Proteger toques ultra rápidos",
+			"description": "Alarga apenas (unos milisegundos) los toques tan cortos que el juego podría perderlos. No cambia los toques normales.",
+			"default": true
+		},
+		"show-indicator": {
+			"type": "bool",
+			"name": "Mostrar indicador SPAM",
+			"description": "Muestra un texto chico arriba a la izquierda mientras el spam está activo.",
+			"default": true
+		}
+	}
+}
