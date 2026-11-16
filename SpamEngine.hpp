@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace spambuff {
 
@@ -21,7 +22,19 @@ struct Config {
     bool   protectTaps = true;  // alarga toques ultra cortos
     double minPressMs  = 6.0;
     double autoIntervalMs = 70.0; // auto-spam: tiempo entre clics (ms)
-    double autoPressMs    = 30.0; // auto-spam: cuanto dura cada clic (ms)
+    int    autoDutyPercent = 55;  // auto-spam: % del ciclo apretado (punto de partida si nivela)
+    bool   level       = true;    // mantener recto (nave / wave): ajusta solo cuanto aprieta
+    // ganancias del nivelador (calibradas con simulaciones, no son ajustes del jugador)
+    double shipKp = 0.050, shipKi = 0.006, shipKpos = 0.030; // nave: la altura reacciona con inercia
+    double waveKp = 0.020, waveKi = 0.006, waveKpos = 0.100; // wave: la altura reacciona directo
+};
+
+// Lo que el motor necesita saber del jugador para mantenerlo recto.
+struct Feedback {
+    bool   valid      = false;
+    int    kind       = 0;     // 0 = no nivelar, 1 = nave, 2 = wave (ahi apretar / soltar cambia la altura)
+    bool   upsideDown = false;
+    double y          = 0.0;   // altura del jugador (unidades de GD)
 };
 
 // Eventos que hay que entregar al juego, en orden (true = presionar, false = soltar).
@@ -43,6 +56,10 @@ public:
     int  fingers() const { return m_fingers; }
     Mode activeMode() const { return m_mode; }
     bool autoActive() const { return m_auto; }
+    double levelDuty() const { return m_lv.on ? m_lv.duty : -1.0; }
+
+    // Estado del jugador en este paso (altura, gravedad, si es nave / wave).
+    void feed(Feedback const& fb) { m_fb = fb; }
 
     // Auto-spam (tecla o boton): genera los clics solo, a intervalo fijo.
     // Mientras esta activo, los toques reales solo se cuentan (no llegan al juego).
@@ -56,12 +73,14 @@ public:
             m_pulseTimer = 0.0;
             m_auto = true;
             m_autoDown = true;
+            levelBegin(c, double(c.autoDutyPercent) / 100.0);
             if (!m_gameDown) setGame(true, out);
-            m_autoTimer = autoPressPhase(c);
+            m_autoTimer = autoPhase(true, c);
         } else {
             m_auto = false;
             m_autoDown = false;
             m_autoTimer = 0.0;
+            m_lv = Leveler{};
             bool want = m_fingers > 0; // si el dedo sigue abajo, queda como hold normal
             if (m_gameDown != want) setGame(want, out);
         }
@@ -111,14 +130,13 @@ public:
         if (dtMs > 0.0) m_lastDt = dtMs;
         if (m_pendingUp && now >= m_upDue) flushPendingUp(out);
         if (m_auto) {
+            levelTick(dtMs);
             m_autoTimer -= dtMs;
             if (m_autoTimer > 0.0) return;
             m_autoDown = !m_autoDown;
+            if (m_autoDown) levelCycle(c); // ciclo nuevo: reajusta cuanto aprieta
             setGame(m_autoDown, out);
-            double step = std::max(m_lastDt, 1.0);
-            double press = autoPressPhase(c);
-            double interval = std::max(c.autoIntervalMs, press + step);
-            double phase = m_autoDown ? press : std::max(interval - press, step);
+            double phase = autoPhase(m_autoDown, c);
             m_autoTimer += phase;
             if (m_autoTimer <= 0.0) m_autoTimer = phase * 0.5;
             return;
@@ -129,13 +147,13 @@ public:
             return;
         }
         if (m_mode != Mode::Pulse) return;
+        levelTick(dtMs);
         m_pulseTimer -= dtMs;
         if (m_pulseTimer > 0.0) return;
         m_pulseDown = !m_pulseDown;
+        if (m_pulseDown) levelCycle(c);
         setGame(m_pulseDown, out);
-        double step = std::max(m_lastDt, 1.0);
-        double down = downPhaseMs(c);
-        double phase = m_pulseDown ? down : std::max(periodMs(c) - down, step);
+        double phase = pulsePhase(m_pulseDown, c);
         m_pulseTimer += phase;
         if (m_pulseTimer <= 0.0) m_pulseTimer = phase * 0.5;
     }
@@ -169,10 +187,97 @@ private:
     bool   m_autoDown  = false;
     double m_autoTimer = 0.0;
 
-    double autoPressPhase(Config const& c) const {
+    // --- nivelador: mantiene la altura aprendiendo cuanto hay que apretar en cada ciclo
+    struct Leveler {
+        bool   on = false;
+        int    kind = 0;
+        bool   upsideDown = false;
+        double refY = 0.0;      // altura que se quiere mantener
+        double startY = 0.0;    // altura al empezar el ciclo
+        double lastY = 0.0;
+        double elapsedMs = 0.0; // duracion del ciclo en curso
+        double initial = 0.5;
+        double base = 0.5;      // % apretado aprendido (el que da altura constante)
+        double duty = 0.5;      // % apretado que se usa en el ciclo en curso
+    };
+    Leveler  m_lv;
+    Feedback m_fb;
+
+    double dutyNow(double fixedDuty) const { return m_lv.on ? m_lv.duty : fixedDuty; }
+
+    void levelBegin(Config const& c, double initialDuty) {
+        m_lv = Leveler{};
+        if (!c.level || !m_fb.valid || m_fb.kind == 0) return;
+        m_lv.on = true;
+        m_lv.kind = m_fb.kind;
+        m_lv.upsideDown = m_fb.upsideDown;
+        m_lv.refY = m_lv.startY = m_lv.lastY = m_fb.y;
+        // en la wave el punto de equilibrio es exactamente 50% (sube y baja a la misma velocidad)
+        double start = (m_fb.kind == 2) ? 0.5 : initialDuty;
+        m_lv.initial = m_lv.base = m_lv.duty = std::clamp(start, 0.2, 0.9);
+    }
+
+    void levelTick(double dtMs) {
+        if (m_lv.on) m_lv.elapsedMs += dtMs;
+    }
+
+    // Se llama al empezar cada ciclo (cuando vuelve a apretar).
+    void levelCycle(Config const& c) {
+        if (!m_lv.on) return;
+        if (!c.level || !m_fb.valid || m_fb.kind == 0) {
+            m_lv.on = false; // cambio a otro modo (cubo, ufo...): vuelve al % fijo
+            return;
+        }
+        double y = m_fb.y;
+        double frames = std::max(m_lv.elapsedMs / (1000.0 / 60.0), 0.5);
+        double jump = 150.0 + 20.0 * frames;
+        if (m_fb.kind != m_lv.kind || m_fb.upsideDown != m_lv.upsideDown || std::fabs(y - m_lv.lastY) > jump) {
+            // cambio de vehiculo, gravedad invertida o salto grande de posicion (portal): empezar de nuevo
+            m_lv.kind = m_fb.kind;
+            m_lv.upsideDown = m_fb.upsideDown;
+            m_lv.refY = m_lv.startY = m_lv.lastY = y;
+            m_lv.elapsedMs = 0.0;
+            m_lv.initial = (m_lv.kind == 2) ? 0.5 : std::clamp(double(c.autoDutyPercent) / 100.0, 0.2, 0.9);
+            m_lv.base = m_lv.duty = m_lv.initial;
+            return;
+        }
+        bool wave = m_lv.kind == 2;
+        double kp = wave ? c.waveKp : c.shipKp;
+        double ki = wave ? c.waveKi : c.shipKi;
+        double kpos = wave ? c.waveKpos : c.shipKpos;
+        double sign = m_fb.upsideDown ? -1.0 : 1.0;     // + = en el sentido que empuja apretar
+        double vEst = (y - m_lv.startY) / frames * sign; // unidades por cuadro a 60 Hz
+        double posErr = (y - m_lv.refY) * sign;
+        double e = vEst + kpos * posErr;
+        m_lv.base = std::clamp(m_lv.base - ki * e, 0.2, 0.9);
+        m_lv.duty = std::clamp(m_lv.base - kp * e, 0.10, 0.92);
+        m_lv.startY = m_lv.lastY = y;
+        m_lv.elapsedMs = 0.0;
+    }
+
+    // La fase mas corta no puede durar menos de un paso de fisica. Si el % que pide el nivelador
+    // no cabe en el intervalo, se estira un poco el intervalo (menos CPS) en vez de perder el control.
+    static double stretchForDuty(double interval, double duty, double step) {
+        double share = std::clamp(std::min(duty, 1.0 - duty), 0.06, 0.5);
+        return std::max(interval, step / share);
+    }
+
+    double autoPhase(bool down, Config const& c) const {
         double step = std::max(m_lastDt, 1.0);
         double interval = std::max(c.autoIntervalMs, step * 2.0);
-        return std::clamp(c.autoPressMs, step, std::max(step, interval - step));
+        double duty = dutyNow(double(c.autoDutyPercent) / 100.0);
+        interval = stretchForDuty(interval, duty, step);
+        double press = std::clamp(interval * duty, step, std::max(step, interval - step));
+        return down ? press : std::max(interval - press, step);
+    }
+
+    double pulsePhase(bool down, Config const& c) const {
+        double step = std::max(m_lastDt, 1.0);
+        double period = periodMs(c);
+        double duty = dutyNow(double(std::clamp(c.dutyPercent, 10, 90)) / 100.0);
+        period = stretchForDuty(period, duty, step);
+        double press = std::clamp(period * duty, step, std::max(step, period - step));
+        return down ? press : std::max(period - press, step);
     }
 
     void setGame(bool d, Emitted& out) {
@@ -219,13 +324,6 @@ private:
         return 1000.0 / cps;
     }
 
-    double downPhaseMs(Config const& c) const {
-        double period = periodMs(c);
-        double step = std::max(m_lastDt, 1.0);
-        double d = period * double(std::clamp(c.dutyPercent, 10, 90)) / 100.0;
-        return std::clamp(d, step, std::max(step, period - step));
-    }
-
     void startSpam(double now, bool cubeLike, Config const& c, Emitted& out) {
         m_spam = true;
         m_mode = (c.mode == Mode::Auto) ? (cubeLike ? Mode::Hold : Mode::Pulse) : c.mode;
@@ -239,13 +337,15 @@ private:
             m_pressedAt = now;
         }
         m_pulseDown = true;
-        m_pulseTimer = downPhaseMs(c);
+        if (m_mode == Mode::Pulse) levelBegin(c, double(std::clamp(c.dutyPercent, 10, 90)) / 100.0);
+        m_pulseTimer = pulsePhase(true, c);
     }
 
     void endSpam(Emitted& out) {
         m_spam = false;
         m_pulseDown = false;
         m_pulseTimer = 0.0;
+        m_lv = Leveler{};
         bool want = m_fingers > 0; // si el dedo sigue abajo, queda como hold normal
         if (m_gameDown != want) setGame(want, out);
         m_n = 0;

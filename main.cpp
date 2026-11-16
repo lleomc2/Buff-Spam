@@ -56,7 +56,8 @@ void refreshConfig() {
     c.dutyPercent = static_cast<int>(mod->getSettingValue<int64_t>("pulse-duty"));
     c.protectTaps = mod->getSettingValue<bool>("protect-taps");
     c.autoIntervalMs = static_cast<double>(mod->getSettingValue<int64_t>("auto-interval-ms"));
-    c.autoPressMs = static_cast<double>(mod->getSettingValue<int64_t>("auto-press-ms"));
+    c.autoDutyPercent = static_cast<int>(mod->getSettingValue<int64_t>("auto-duty"));
+    c.level = mod->getSettingValue<bool>("keep-level");
     r.cfg = c;
     r.showIndicator = mod->getSettingValue<bool>("show-indicator");
     r.showAutoButton = mod->getSettingValue<bool>("show-auto-button");
@@ -77,6 +78,19 @@ bool cubeLike(GJBaseGameLayer* layer, bool isPlayer1) {
     if (!p) return true;
     return !(p->m_isShip || p->m_isBird || p->m_isBall || p->m_isDart ||
              p->m_isRobot || p->m_isSpider || p->m_isSwing);
+}
+
+// Estado del jugador para el nivelador: en nave y wave, apretar / soltar cambia la altura y el
+// motor ajusta solo cuanto aprieta para que no suba ni baje (auto-spam recto).
+spambuff::Feedback feedbackFor(GJBaseGameLayer* layer, bool isPlayer1) {
+    spambuff::Feedback fb;
+    PlayerObject* p = isPlayer1 ? layer->m_player1 : layer->m_player2;
+    if (!p) return fb;
+    fb.valid = true;
+    fb.kind = p->m_isShip ? 1 : (p->m_isDart ? 2 : 0);
+    fb.upsideDown = p->m_isUpsideDown;
+    fb.y = static_cast<double>(p->getPositionY());
+    return fb;
 }
 
 // 0 = oculto, 1 = "SPAM" (deteccion automatica), 2 = "AUTO" (tecla / boton)
@@ -162,6 +176,10 @@ class $modify(SBBaseGameLayer, GJBaseGameLayer) {
 
             double dtMs = static_cast<double>(dt) * 1000.0;
             r.engine.now += dtMs;
+
+            for (int i = 0; i < 2; ++i) {
+                r.engine.ch[i].feed(feedbackFor(this, i == 0));
+            }
 
             // Auto-spam: solo el jugador 1 (igual que un toque normal).
             auto& main = r.engine.ch[0];

@@ -13,7 +13,8 @@ Hace que el spam sea más fluido y consistente sin molestar el control normal.
 ## Auto-spam (nuevo en v1.1)
 - Botón **AUTO** arriba a la izquierda dentro del nivel: lo tocás y el mod hace clic solo, a intervalo fijo. Lo tocás de nuevo para apagarlo.
 - **Tecla de auto-spam** (necesita teclado, por ejemplo uno Bluetooth): por defecto `F`. Se puede cambiar en los ajustes. Modo *Alternar* (una vez prende, otra apaga) o *Mantener* (spam solo mientras la apretás).
-- El intervalo se elige en **milisegundos** (1000 ÷ intervalo = clics por segundo: 70 ms ≈ 14 CPS, 50 ms = 20 CPS) y también la duración de cada clic.
+- El intervalo se elige en **milisegundos** (1000 ÷ intervalo = clics por segundo: 70 ms ≈ 14 CPS, 50 ms = 20 CPS).
+- **Mantener recto** (activado por defecto): en nave y wave el mod mide cuánto sube o baja en cada ciclo y ajusta solo cuánto aprieta, así el spam va derecho en vez de irse hacia abajo. Funciona también con gravedad invertida.
 - Mientras el auto-spam está encendido tus toques no cuentan. Se apaga solo al pausar, y al morir si lo dejás activado en los ajustes.
 
 ## Extras

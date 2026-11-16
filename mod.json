@@ -5,7 +5,7 @@
 	},
 	"id": "lleomc2.spam_buff",
 	"name": "Spam Buff",
-	"version": "v1.1.0",
+	"version": "v1.2.0",
 	"developer": "lleomc2",
 	"description": "Mejora el spam: detecta toques rápidos y los convierte en hold o pulsos regulares. Incluye auto-spam con tecla o botón en pantalla.",
 	"settings": {
@@ -129,13 +129,13 @@
 				"input": true
 			}
 		},
-		"auto-press-ms": {
+		"auto-duty": {
 			"type": "int",
-			"name": "Auto-spam: duración del clic (ms)",
-			"description": "Cuánto dura apretado cada clic. Se acorta solo si es más largo que el intervalo.",
-			"default": 30,
-			"min": 5,
-			"max": 500,
+			"name": "Auto-spam: % apretado",
+			"description": "Porcentaje de cada ciclo que el botón queda apretado. Con \"Mantener recto\" activado es solo el punto de partida (en nave y wave se ajusta solo); si lo apagás se usa tal cual.",
+			"default": 55,
+			"min": 20,
+			"max": 90,
 			"control": {
 				"slider": true,
 				"slider-step": 5,
@@ -152,6 +152,12 @@
 			"type": "bool",
 			"name": "Mostrar botón AUTO en pantalla",
 			"description": "Botón arriba a la izquierda para encender y apagar el auto-spam con el dedo. Se aplica al entrar a un nivel.",
+			"default": true
+		},
+		"keep-level": {
+			"type": "bool",
+			"name": "Mantener recto (nave y wave)",
+			"description": "En auto-spam y en modo Pulso, ajusta solo cuánto aprieta en cada ciclo para que la nave o la wave no suban ni bajen. En los demás modos de juego no hace nada.",
 			"default": true
 		}
 	}

@@ -1,3 +1,8 @@
+# v1.2.0
+
+- Arreglo: el auto-spam ya no se va hundiendo. En nave y wave ajusta solo cuánto aprieta en cada ciclo para mantener la altura (opción "Mantener recto", activada por defecto). También se aplica al modo Pulso.
+- Nuevo ajuste "Auto-spam: % apretado" (reemplaza a la duración fija del clic en ms).
+
 # v1.1.0
 
 - Auto-spam: botón AUTO en pantalla y tecla configurable (Alternar / Mantener).
